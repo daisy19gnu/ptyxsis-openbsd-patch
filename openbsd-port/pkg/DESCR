@@ -1,0 +1,18 @@
+Ptyxis is a modern terminal emulator built for the container era,
+designed to seamlessly integrate with GNOME desktop environments.
+
+Key Features:
+- Modern GNOME interface built with GTK4 and libadwaita
+- Dynamic theming with extensive color palette support
+- Smart process tracking (sudo, SSH sessions)
+- Advanced tab management with live previews
+- Customizable keyboard shortcuts and user profiles
+- High-performance rendering with GPU acceleration
+- Terminal inspector for debugging
+- Encrypted scrollback buffers for enhanced privacy
+
+OpenBSD-specific notes:
+This port has been adapted to work with OpenBSD 7.7 using libadwaita 1.6
+and VTE 0.78. Container integration features (Podman, Toolbox, Distrobox)
+are not available on OpenBSD as they require Linux-specific functionality.
+The core terminal emulation features work fully.

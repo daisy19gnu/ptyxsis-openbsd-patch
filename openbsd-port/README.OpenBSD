@@ -1,0 +1,80 @@
+# Ptyxis for OpenBSD
+
+This is an OpenBSD port of Ptyxis, a modern terminal emulator for GNOME.
+
+## Building from Ports
+
+### Prerequisites
+
+The following packages are required and will be automatically installed
+as dependencies:
+
+- meson >= 1.0.0
+- glib2 >= 2.80
+- gtk+4 >= 4.14
+- libadwaita >= 1.8
+- vte3-gtk4 >= 0.79
+- json-glib >= 1.6
+- gsettings-desktop-schemas
+
+### Building
+
+1. Place this port directory in your OpenBSD ports tree:
+   ```
+   /usr/ports/x11/ptyxis/
+   ```
+
+2. Build and install:
+   ```
+   cd /usr/ports/x11/ptyxis
+   make
+   doas make install
+   ```
+
+## OpenBSD-Specific Notes
+
+### Container Support
+
+While Ptyxis was designed with first-class container integration for
+Podman, Toolbox, and Distrobox, these features may have limited
+functionality on OpenBSD as most container runtimes are Linux-specific.
+
+The terminal will work perfectly as a standard GNOME terminal emulator
+on OpenBSD.
+
+### libportal
+
+The libportal-gtk4 dependency is Linux-specific and is automatically
+disabled on OpenBSD builds. This affects some portal-based features
+but does not impact core terminal functionality.
+
+### ptyxis-agent
+
+The ptyxis-agent component builds successfully on OpenBSD. The GLIBC
+compatibility layer is automatically disabled on OpenBSD (see patches/).
+
+## Testing
+
+After installation, you can launch Ptyxis:
+
+```
+ptyxis
+```
+
+Or from the GNOME applications menu.
+
+## Known Limitations
+
+- Container detection and integration features are Linux-specific
+- Some libportal features are unavailable on OpenBSD
+- systemd-specific features (user scopes) are not available
+
+## Reporting Issues
+
+For OpenBSD-specific issues with this port, please check:
+- OpenBSD ports mailing list
+- https://gitlab.gnome.org/chergert/ptyxis/-/issues (upstream)
+
+## License
+
+Ptyxis is licensed under GPLv3+. See /usr/local/share/doc/pkg-readmes/ptyxis

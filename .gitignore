@@ -1,0 +1,27 @@
+# Build artifacts
+*.tgz
+*.tar.gz
+*.o
+*.so
+
+# Build directories
+_build/
+build/
+
+# Editor files
+*.swp
+*~
+.DS_Store
+
+# Claude memory (private, not for version control)
+.claude/
+
+# Upstream git clones (use git submodule if needed)
+ptyxis/
+
+# Old manually-patched source files (superseded by patches/)
+src/
+
+# Port tarballs
+openbsd-port/*.tgz
+openbsd-port/*.tar.gz
