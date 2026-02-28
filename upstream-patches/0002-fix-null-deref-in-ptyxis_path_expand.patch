@@ -1,0 +1,39 @@
+From: MINORI IKEDA <daisysi9@gmail.com>
+Subject: [PATCH] util: fix NULL dereference in ptyxis_path_expand()
+
+When wordexp() fails (e.g. out of memory, or bad input), `ret` remains
+NULL. The subsequent call to g_path_is_absolute(ret) then dereferences
+NULL, causing a crash.
+
+Also add a fallback: if ret is still NULL after all expansion attempts,
+return a copy of the original path rather than NULL, matching the
+documented return type ("A newly allocated string").
+
+This crash was observed on OpenBSD (where wordexp(3) is not available
+and wordexp() always returns an error code), but the NULL dereference
+can occur on any platform when wordexp() fails.
+---
+ src/ptyxis-util.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+--- a/src/ptyxis-util.c
++++ b/src/ptyxis-util.c
+@@ -208,12 +208,13 @@ ptyxis_path_expand (const char *path)
+   if (r == 0 && state.we_wordc > 0)
+     ret = g_strdup (state.we_wordv [0]);
+   wordfree (&state);
+
+-  if (!g_path_is_absolute (ret))
++  if (ret != NULL && !g_path_is_absolute (ret))
+     {
+       g_autofree char *freeme = ret;
+
+       ret = g_build_filename (g_get_home_dir (), freeme, NULL);
+     }
+
+   g_free (replace_home);
+   g_free (escaped);
+
+-  return ret;
++  return ret != NULL ? ret : g_strdup (path);
+ }

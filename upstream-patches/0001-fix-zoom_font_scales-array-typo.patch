@@ -1,0 +1,30 @@
+From: MINORI IKEDA <daisysi9@gmail.com>
+Subject: [PATCH] tab: fix typo in zoom_font_scales array initializer
+
+In the zoom_font_scales[] initializer, the last large-zoom entry reads:
+
+    1.0 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1,2,
+
+In a C array initializer the comma is the element separator, so "1,2"
+is parsed as two separate elements: the value 1.0*1.2^6*1 (≈2.986) and
+the literal 2. This gives the array 17 elements instead of the intended
+16, making:
+  - index 15 duplicate the value of index 14 (both ≈2.986 instead of ≈3.583)
+  - an unreachable extra element 2.0 at index 16
+
+Change "1,2" to "1.2" so the maximum zoom level is correctly 1.2^7 ≈ 3.583.
+
+Fixes: https://gitlab.gnome.org/chergert/ptyxis/-/issues/XXXX
+---
+ src/ptyxis-tab.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/src/ptyxis-tab.c
++++ b/src/ptyxis-tab.c
+@@ -137,7 +137,7 @@ static double zoom_font_scales[] = {
+   1.0 * 1.2 * 1.2 * 1.2 * 1.2,
+   1.0 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2,
+   1.0 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2,
+-  1.0 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1,2,
++  1.0 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2 * 1.2,
+ };
