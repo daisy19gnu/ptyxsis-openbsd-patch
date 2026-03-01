@@ -63,11 +63,11 @@ cd ptyxis
 git checkout 49.3
 
 # パッチ適用
-patch -p1 < /path/to/openbsd-port/patches/patch-agent_meson_build
-patch -p1 < /path/to/openbsd-port/patches/patch-agent_ptyxis-agent_c
-patch -p1 < /path/to/openbsd-port/patches/patch-src_main_c
-patch -p1 < /path/to/openbsd-port/patches/patch-src_ptyxis-tab_c
-patch -p1 < /path/to/openbsd-port/patches/patch-src_ptyxis-util_c
+patch -p0 < /path/to/openbsd-port/patches/patch-agent_meson_build
+patch -p0 < /path/to/openbsd-port/patches/patch-agent_ptyxis-agent_c
+patch -p0 < /path/to/openbsd-port/patches/patch-src_main_c
+patch -p0 < /path/to/openbsd-port/patches/patch-src_ptyxis-tab_c
+patch -p0 < /path/to/openbsd-port/patches/patch-src_ptyxis-util_c
 
 # ビルド
 meson setup build --prefix=/usr/local --buildtype=debugoptimized -Ddevelopment=false

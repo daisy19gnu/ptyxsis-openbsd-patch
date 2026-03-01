@@ -1,201 +1,63 @@
-# Ptyxis OpenBSD Port - プロジェクトサマリー
+# Ptyxis for OpenBSD - プロジェクト状況
 
-## 🎉 完成状況
+## 現在の状態
 
-OpenBSD 7.7向けのPtyxis portを作成しました!
+| 項目 | 内容 |
+|------|------|
+| Ptyxis バージョン | 49.3 |
+| 対象 OS | OpenBSD 7.8 amd64 |
+| ビルド方式 | direct meson ビルド (推奨) |
+| 動作確認 | 2026-02-28 |
 
-## 📦 成果物
+## 適用中のパッチ
 
-### 1. OpenBSD Port構造 (`openbsd-port/`)
+| パッチ | 対象ファイル | 内容 |
+|--------|------------|------|
+| patch-agent_meson_build | agent/meson.build | GLIBC 互換ビルドを Linux 限定に |
+| patch-agent_ptyxis-agent_c | agent/ptyxis-agent.c | pledge(2) によるシステムコール制限 |
+| patch-src_main_c | src/main.c | XDG_RUNTIME_DIR 自動設定 |
+| patch-src_ptyxis-tab_c | src/ptyxis-tab.c | sys/wait.h 追加 + zoom 配列タイポ修正 |
+| patch-src_ptyxis-util_c | src/ptyxis-util.c | wordexp(3) 無効化 + NULL 参照修正 |
 
-完全なOpenBSD port構造を作成しました:
+## 上流へのバグ報告
+
+以下の 2 件は全プラットフォームに影響するバグとして上流に報告済み（または報告予定）。
+
+| パッチ | 内容 | 状態 |
+|--------|------|------|
+| 0001-fix-zoom_font_scales-array-typo.patch | zoom_font_scales 配列のタイポ | 報告準備済み |
+| 0002-fix-null-deref-in-ptyxis_path_expand.patch | NULL ポインタ参照 | 報告準備済み |
+
+報告手順: `upstream-patches/HOWTO_SUBMIT.md` を参照。
+
+## 動作確認済み機能
+
+- ビルド成功 (OpenBSD 7.8 amd64)
+- 起動
+- 複数タブの作成・切り替え
+- 基本的な端末操作
+
+## リポジトリ構成
 
 ```
-openbsd-port/
-├── Makefile                        # Port Makefile (ビルド設定)
-├── distinfo                        # チェックサム情報
-├── README.OpenBSD                  # OpenBSD固有の説明
-├── patches/
-│   └── patch-agent_meson_build    # GLIBC互換性レイヤーを無効化
-└── pkg/
-    ├── DESCR                       # パッケージ説明
-    └── PLIST                       # インストールファイル一覧
+OpenBSD-Ptyxis/
+├── openbsd-port/
+│   ├── Makefile              # port 定義 (V=49.3)
+│   ├── distinfo              # SHA256 チェックサム
+│   ├── README.OpenBSD        # ports インストール向け説明
+│   ├── patches/              # 5 つの OpenBSD 向けパッチ
+│   └── pkg/
+│       ├── DESCR
+│       └── PLIST
+├── upstream-patches/         # 上流報告用パッチと手順
+├── build-ptyxis.sh           # SSH 経由自動ビルドスクリプト
+├── check-version.sh          # バージョン確認スクリプト
+├── BUILD_INSTRUCTIONS.md     # 詳細ビルド手順
+└── README.md                 # プロジェクト概要
 ```
 
-### 2. ドキュメント
+## 次のアクション
 
-- **README.md**: プロジェクト全体の概要
-- **BUILD_INSTRUCTIONS.md**: 詳細なビルド手順
-- **openbsd-port/README.OpenBSD**: OpenBSD固有の注意事項
-
-### 3. ソースコード
-
-- Ptyxis 50.alpha (最新版) をGitLabから取得済み
-
-## ✅ 依存関係の検証
-
-すべての必要な依存関係がOpenBSD 7.7で利用可能であることを確認:
-
-| 依存関係 | 要件 | OpenBSD 7.7 | 状態 |
-|---------|------|-------------|------|
-| GLib | >= 2.80 | 2.80.x | ✅ |
-| GTK4 | >= 4.14 | 4.18.6 | ✅ |
-| libadwaita | >= 1.8 | 1.8.0v0 | ✅ |
-| VTE-gtk4 | >= 0.79 | 0.80.4 | ✅ |
-| JSON-GLib | >= 1.6 | 利用可能 | ✅ |
-| Meson | >= 1.0.0 | 利用可能 | ✅ |
-
-## 🔧 技術的な対応事項
-
-### パッチの作成
-
-**patch-agent_meson_build**:
-- x86_64アーキテクチャでのGLIBC互換性コードをLinux専用に制限
-- OpenBSDはGLIBCを使用しないため、この変更が必須
-
-### 自動的に処理される事項
-
-1. **libportal-gtk4**:
-   - `src/meson.build`でLinux専用に条件分岐済み
-   - OpenBSDでは自動的にスキップされる
-
-2. **Linux固有の機能**:
-   - コンテナ統合機能 (Podman, Toolbox等)
-   - systemd user scopes
-   - これらはコード内で`#ifdef __linux__`で条件分岐済み
-
-## 🚀 次のステップ
-
-### OpenBSD環境でのテスト
-
-1. **portのインストール**
-   ```sh
-   doas mkdir -p /usr/ports/x11/ptyxis
-   doas cp -r openbsd-port/* /usr/ports/x11/ptyxis/
-   ```
-
-2. **distinfoの生成**
-   ```sh
-   cd /usr/ports/x11/ptyxis
-   make makesum
-   ```
-
-3. **ビルド**
-   ```sh
-   make
-   ```
-
-4. **インストール**
-   ```sh
-   doas make install
-   ```
-
-5. **パッケージ作成**
-   ```sh
-   make package
-   ```
-
-### 想定される問題と対処
-
-#### ビルド時の問題
-
-1. **PLISTの不一致**
-   - 実際のビルド後に`make update-plist`で更新
-   - ロケールファイルの数が異なる可能性
-
-2. **依存関係の追加**
-   - ビルド時に不足が判明した依存関係を追加
-
-3. **パッチの調整**
-   - ビルドエラーが発生した場合、追加パッチが必要
-
-#### 実行時の問題
-
-1. **GSettings schemas**
-   - インストール後に`glib-compile-schemas`実行
-   - Makefileで`@tag`ディレクティブで自動実行されるはず
-
-2. **デスクトップ統合**
-   - `update-desktop-database`
-   - `gtk-update-icon-cache`
-   - これらも`@tag`で自動実行
-
-## 📊 port品質チェックリスト
-
-- [x] Makefile が適切なフォーマットで作成されている
-- [x] DESCR が簡潔で明確
-- [x] PLIST が予測される内容を含む
-- [x] パッチがOpenBSD形式に準拠
-- [x] 依存関係が正しく指定されている
-- [ ] 実機でのビルドテスト (要OpenBSD環境)
-- [ ] 実行テスト (要OpenBSD環境)
-- [ ] 複数アーキテクチャでのテスト (amd64, arm64等)
-
-## 🎯 OpenBSD Portsへの貢献準備
-
-このportが十分にテストされた後:
-
-1. **ports@openbsd.orgへの提出**
-   - メーリングリストでレビューを依頼
-   - 経験豊富な開発者からフィードバックを受ける
-
-2. **portsツリーへのコミット**
-   - 承認されれば公式portsツリーに追加
-   - `/usr/ports/x11/ptyxis`として利用可能に
-
-3. **上流への貢献**
-   - OpenBSD対応パッチを上流(Ptyxis)にプルリクエスト
-   - 将来のバージョンでOpenBSDサポートが公式に
-
-## 💡 学んだこと
-
-1. **OpenBSD Portsの構造**
-   - Makefile、distinfo、pkg/、patches/の役割
-   - `@tag`ディレクティブによる自動化
-
-2. **依存関係の調査**
-   - openports.plでのパッケージバージョン確認
-   - GNOME Consoleなど類似portの参考
-
-3. **プラットフォーム固有の対応**
-   - GLIBC互換性レイヤーの無効化
-   - Linux固有機能の条件分岐
-
-4. **Mesonビルドシステム**
-   - `target_machine.system()`による条件分岐
-   - OpenBSDでの動作確認の重要性
-
-## 📖 参考資料
-
-作成時に参照した主なリソース:
-
-1. **Ptyxis関連**
-   - https://gitlab.gnome.org/chergert/ptyxis
-   - README.md、meson.build
-
-2. **OpenBSD Ports**
-   - https://www.openbsd.org/faq/ports/
-   - https://openports.pl/
-   - GNOME Console port (参考実装)
-
-3. **依存パッケージ**
-   - https://openports.pl/path/x11/gtk+4
-   - https://openports.pl/path/x11/gnome/libadwaita
-   - https://openports.pl/path/devel/vte3,-gtk4
-
-## 🙏 謝辞
-
-- **Christian Hergert**: Ptyxisの開発者
-- **OpenBSD Portsチーム**: 優れたports構造とドキュメント
-- **GNOMEプロジェクト**: GTK4、libadwaita、VTEの開発
-
-## 📝 ライセンス
-
-このport作成作業は、Ptyxisのライセンス(GPLv3+)に従います。
-
----
-
-**作成日**: 2025-10-21
-**作成環境**: Fedora 43 (準備作業)
-**対象環境**: OpenBSD 7.7
-**Ptyxisバージョン**: 50.alpha
+1. 上流への Issue / MR 提出 (`upstream-patches/HOWTO_SUBMIT.md`)
+2. Ptyxis 新バージョンのリリース確認 (`./check-version.sh`)
+3. OpenBSD ports メーリングリスト (ports@openbsd.org) への提出検討

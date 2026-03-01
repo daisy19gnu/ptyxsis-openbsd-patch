@@ -1,80 +1,100 @@
 # Ptyxis for OpenBSD
 
-This is an OpenBSD port of Ptyxis, a modern terminal emulator for GNOME.
+Ptyxis is a modern terminal emulator for GNOME, built on GTK4 and libadwaita.
+This port targets OpenBSD 7.8 amd64.
 
-## Building from Ports
+## Building
 
-### Prerequisites
+### Recommended: direct meson build
 
-The following packages are required and will be automatically installed
-as dependencies:
+The ports system can encounter WANTLIB version mismatches after library updates.
+A direct meson build avoids this issue.
 
-- meson >= 1.0.0
-- glib2 >= 2.80
-- gtk+4 >= 4.14
-- libadwaita >= 1.8
-- vte3-gtk4 >= 0.79
-- json-glib >= 1.6
-- gsettings-desktop-schemas
+```sh
+git clone https://gitlab.gnome.org/chergert/ptyxis.git
+cd ptyxis
+git checkout 49.3
 
-### Building
+patch -p0 < /path/to/patches/patch-agent_meson_build
+patch -p0 < /path/to/patches/patch-agent_ptyxis-agent_c
+patch -p0 < /path/to/patches/patch-src_main_c
+patch -p0 < /path/to/patches/patch-src_ptyxis-tab_c
+patch -p0 < /path/to/patches/patch-src_ptyxis-util_c
 
-1. Place this port directory in your OpenBSD ports tree:
-   ```
-   /usr/ports/x11/ptyxis/
-   ```
-
-2. Build and install:
-   ```
-   cd /usr/ports/x11/ptyxis
-   make
-   doas make install
-   ```
-
-## OpenBSD-Specific Notes
-
-### Container Support
-
-While Ptyxis was designed with first-class container integration for
-Podman, Toolbox, and Distrobox, these features may have limited
-functionality on OpenBSD as most container runtimes are Linux-specific.
-
-The terminal will work perfectly as a standard GNOME terminal emulator
-on OpenBSD.
-
-### libportal
-
-The libportal-gtk4 dependency is Linux-specific and is automatically
-disabled on OpenBSD builds. This affects some portal-based features
-but does not impact core terminal functionality.
-
-### ptyxis-agent
-
-The ptyxis-agent component builds successfully on OpenBSD. The GLIBC
-compatibility layer is automatically disabled on OpenBSD (see patches/).
-
-## Testing
-
-After installation, you can launch Ptyxis:
-
-```
-ptyxis
+meson setup build --prefix=/usr/local --buildtype=debugoptimized -Ddevelopment=false
+ninja -C build
+sudo ninja -C build install
 ```
 
-Or from the GNOME applications menu.
+### Via ports tree
+
+```sh
+sudo mkdir -p /usr/ports/x11/ptyxis
+sudo cp -r . /usr/ports/x11/ptyxis/
+cd /usr/ports/x11/ptyxis
+make makesum
+make
+sudo make install
+```
+
+## OpenBSD-Specific Patches
+
+Five patches are applied to build and run correctly on OpenBSD.
+
+### patch-agent_meson_build
+
+Restricts the GLIBC compatibility build to Linux only.
+OpenBSD uses its own libc and does not need the GLIBC shim in the agent.
+
+### patch-agent_ptyxis-agent_c
+
+Adds `pledge(2)` to ptyxis-agent after startup to restrict system call access
+to only what the agent needs: PTY management, D-Bus communication via
+socketpair, process spawning, and user database lookups.
+
+If pledge fails, the agent exits rather than continuing with full privileges.
+
+### patch-src_main_c
+
+OpenBSD has no systemd, so `XDG_RUNTIME_DIR` is not set automatically.
+GTK4 and D-Bus require this directory for sockets and caches.
+
+This patch creates `/tmp/runtime-<uid>` (mode 0700) and sets `XDG_RUNTIME_DIR`
+at startup if the variable is not already set.
+
+### patch-src_ptyxis-tab_c
+
+Two fixes:
+
+1. Adds `#include <sys/wait.h>` for `WIFEXITED`, `WIFSIGNALED`, and related
+   macros, which are only available via sys/wait.h on OpenBSD.
+
+2. Fixes a typo in the `zoom_font_scales[]` array: `1,2` should be `1.2`.
+   In a C array initializer the comma is a separator, so `1,2` creates two
+   elements instead of one decimal value. This bug exists in 49.2 and 49.3
+   and has been reported upstream.
+
+### patch-src_ptyxis-util_c
+
+Two fixes:
+
+1. Disables `wordexp(3)`, which is not available on OpenBSD. The tilde and
+   `$HOME` expansions are handled by other code paths, so a simple
+   `g_strdup(path)` fallback is used instead.
+
+2. Fixes a NULL pointer dereference: when `wordexp()` fails, `ret` is NULL.
+   The subsequent call to `g_path_is_absolute(ret)` would crash. This bug
+   affects Linux as well (memory pressure) and has been reported upstream.
 
 ## Known Limitations
 
-- Container detection and integration features are Linux-specific
-- Some libportal features are unavailable on OpenBSD
-- systemd-specific features (user scopes) are not available
-
-## Reporting Issues
-
-For OpenBSD-specific issues with this port, please check:
-- OpenBSD ports mailing list
-- https://gitlab.gnome.org/chergert/ptyxis/-/issues (upstream)
+| Feature | Status | Reason |
+|---------|--------|--------|
+| Podman/Toolbox/Distrobox integration | Unavailable | Linux container runtimes |
+| libportal features | Unavailable | Flatpak portals (Linux only) |
+| systemd user scopes | Unavailable | systemd (Linux only) |
 
 ## License
 
-Ptyxis is licensed under GPLv3+. See /usr/local/share/doc/pkg-readmes/ptyxis
+Ptyxis is licensed under GPLv3+.
+See /usr/local/share/doc/pkg-readmes/ptyxis after installation.

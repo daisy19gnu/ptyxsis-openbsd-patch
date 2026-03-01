@@ -1,212 +1,115 @@
-#!/bin/bash
+#!/bin/sh
 #
-# Ptyxis for OpenBSD - 自動ビルドスクリプト
+# build-ptyxis.sh - Build and install Ptyxis on OpenBSD via direct meson build
 #
-# このスクリプトは、Ptyxisの新バージョンを自動的にビルドします。
-# 今回躓いたポイント（WANTLIB問題など）を自動的に回避します。
+# Usage:
+#   ./build-ptyxis.sh                  # build current version (from Makefile)
+#   ./build-ptyxis.sh 49.4             # update Makefile to 49.4 and build
+#
+# Environment variables (all optional):
+#   OPENBSD_HOST    SSH hostname of the OpenBSD build machine (default: openbsd77)
+#   REMOTE_SRCDIR   Work directory on the remote machine, relative to HOME
+#                   (default: ptyxis-src)
 
-set -e  # エラーが発生したら停止
+set -e
 
-OPENBSD_HOST="openbsd77"
-WORK_DIR="/home/ikeda/OpenBSD-Ptyxis"
-REMOTE_PORT_DIR="/usr/ports/x11/ptyxis"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PORT_DIR="$SCRIPT_DIR/openbsd-port"
 
-# 色付き出力
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+OPENBSD_HOST="${OPENBSD_HOST:-openbsd77}"
+REMOTE_SRCDIR="${REMOTE_SRCDIR:-ptyxis-src}"
 
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# ---------------------------------------------------------------------------
+# Log helpers (no ANSI codes - output may be piped or logged to file)
+# ---------------------------------------------------------------------------
+log_info()  { printf 'INFO:  %s\n' "$1"; }
+log_warn()  { printf 'WARN:  %s\n' "$1"; }
+log_error() { printf 'ERROR: %s\n' "$1" >&2; }
+
+# ---------------------------------------------------------------------------
+# Resolve version
+# ---------------------------------------------------------------------------
+get_version() {
+    grep "^V =" "$PORT_DIR/Makefile" | awk '{print $3}'
 }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+VERSION="$(get_version)"
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+if [ "$#" -ge 1 ]; then
+    NEW_VERSION="$1"
+    log_info "Updating Makefile: $VERSION -> $NEW_VERSION"
+    sed -i "s/^V =.*$/V =		$NEW_VERSION/" "$PORT_DIR/Makefile"
+    VERSION="$NEW_VERSION"
+fi
 
-# 現在のバージョンを取得
-get_current_version() {
-    grep "^V =" "$WORK_DIR/openbsd-port/Makefile" | awk '{print $3}'
-}
+log_info "Version: $VERSION"
 
-# 最新バージョンを取得（WebFetch等で確認）
-check_latest_version() {
-    log_info "最新バージョンを確認中..."
-    log_warn "手動で https://gitlab.gnome.org/chergert/ptyxis/-/tags を確認してください"
+# ---------------------------------------------------------------------------
+# Check SSH connectivity
+# ---------------------------------------------------------------------------
+log_info "Checking connection to $OPENBSD_HOST..."
+if ! ssh -q -o BatchMode=yes -o ConnectTimeout=10 "$OPENBSD_HOST" true; then
+    log_error "Cannot connect to $OPENBSD_HOST."
+    log_error "Verify that the host is reachable and SSH key authentication is configured."
+    exit 1
+fi
 
-    CURRENT_VERSION=$(get_current_version)
-    log_info "現在のバージョン: $CURRENT_VERSION"
+# ---------------------------------------------------------------------------
+# Sync patches to remote
+# ---------------------------------------------------------------------------
+REMOTE_PATCH_DIR="$REMOTE_SRCDIR/patches"
 
-    read -p "新しいバージョンでビルドしますか？ (バージョン番号を入力、Enterでスキップ): " NEW_VERSION
+log_info "Syncing patches to $OPENBSD_HOST:~/$REMOTE_PATCH_DIR/ ..."
+ssh "$OPENBSD_HOST" "mkdir -p ~/$REMOTE_PATCH_DIR"
+scp "$PORT_DIR/patches/patch-"* "$OPENBSD_HOST:~/$REMOTE_PATCH_DIR/"
 
-    if [ -z "$NEW_VERSION" ]; then
-        log_info "現在のバージョン $CURRENT_VERSION でビルドを続行します"
-        VERSION=$CURRENT_VERSION
-    else
-        log_info "バージョンを $NEW_VERSION に更新します"
-        VERSION=$NEW_VERSION
+# ---------------------------------------------------------------------------
+# Remote build
+# Variables expanded locally: $VERSION, $REMOTE_SRCDIR, $REMOTE_PATCH_DIR
+# Variables expanded remotely: $HOME (via \$HOME in heredoc)
+# ---------------------------------------------------------------------------
+log_info "Building Ptyxis $VERSION on $OPENBSD_HOST..."
 
-        # Makefileを更新
-        sed -i.bak "s/^V =.*$/V =\t\t$NEW_VERSION/" "$WORK_DIR/openbsd-port/Makefile"
-        log_info "Makefileを更新しました"
-    fi
-}
+ssh "$OPENBSD_HOST" /bin/sh <<REMOTE
+set -e
 
-# WANTLIBが存在しないことを確認（今回の問題の回避）
-verify_makefile() {
-    log_info "Makefileの検証中..."
+VERSION="$VERSION"
+SRCDIR="\$HOME/$REMOTE_SRCDIR/src"
+PATCHDIR="\$HOME/$REMOTE_PATCH_DIR"
 
-    if grep -q "^WANTLIB" "$WORK_DIR/openbsd-port/Makefile"; then
-        log_error "Makefileに WANTLIB が含まれています！"
-        log_error "OpenBSD 7.8以降では、WANTLIBの自動検出を推奨します"
-        log_warn "WANTLIB行を削除してください、または続行しますか？ [y/N]"
-        read -p "" CONTINUE
-        if [ "$CONTINUE" != "y" ]; then
-            exit 1
-        fi
-    else
-        log_info "OK: WANTLIBは自動検出に設定されています"
-    fi
-}
+# Clone or update source
+if [ -d "\$SRCDIR/.git" ]; then
+    printf 'INFO:  Fetching tags from upstream...\n'
+    git -C "\$SRCDIR" fetch --tags
+else
+    printf 'INFO:  Cloning ptyxis source...\n'
+    git clone https://gitlab.gnome.org/chergert/ptyxis.git "\$SRCDIR"
+fi
 
-# ファイルをOpenBSDに同期
-sync_to_openbsd() {
-    log_info "OpenBSDにファイルを同期中..."
+cd "\$SRCDIR"
+git checkout "\$VERSION"
+git clean -fdx
 
-    # Makefile
-    scp "$WORK_DIR/openbsd-port/Makefile" "$OPENBSD_HOST:$REMOTE_PORT_DIR/" || {
-        log_error "Makefileの同期に失敗しました"
-        exit 1
-    }
+# Apply OpenBSD patches
+for p in "\$PATCHDIR"/patch-*; do
+    printf 'INFO:  Applying %s...\n' "\$(basename "\$p")"
+    patch -p0 < "\$p"
+done
 
-    # patches
-    scp "$WORK_DIR/openbsd-port/patches/"* "$OPENBSD_HOST:$REMOTE_PORT_DIR/patches/" || {
-        log_error "パッチの同期に失敗しました"
-        exit 1
-    }
+# Configure
+rm -rf build
+meson setup build \
+    --prefix=/usr/local \
+    --buildtype=debugoptimized \
+    -Ddevelopment=false
 
-    log_info "ファイル同期完了"
-}
+# Compile
+ninja -C build
 
-# OpenBSD上でビルド
-build_on_openbsd() {
-    log_info "OpenBSD上でビルドを開始..."
+# Install
+sudo ninja -C build install
 
-    # クリーンビルド
-    log_info "Step 1/5: クリーンアップ..."
-    ssh "$OPENBSD_HOST" "cd $REMOTE_PORT_DIR && make clean=dist" || {
-        log_warn "クリーンアップで警告が出ましたが続行します"
-    }
+printf 'INFO:  Installation complete.\n'
+REMOTE
 
-    # ソースのダウンロードとチェックサム更新
-    log_info "Step 2/5: ソースのダウンロードとチェックサム更新..."
-    ssh "$OPENBSD_HOST" "cd $REMOTE_PORT_DIR && make fetch && make makesum" || {
-        log_error "ソースのダウンロードに失敗しました"
-        exit 1
-    }
-
-    # パッチ適用
-    log_info "Step 3/5: パッチ適用..."
-    ssh "$OPENBSD_HOST" "cd $REMOTE_PORT_DIR && make patch" || {
-        log_error "パッチの適用に失敗しました"
-        log_error "新しいバージョンでパッチの更新が必要な可能性があります"
-        exit 1
-    }
-
-    # ビルド
-    log_info "Step 4/5: コンパイル中（時間がかかります）..."
-    ssh "$OPENBSD_HOST" "cd $REMOTE_PORT_DIR && make build" || {
-        log_error "ビルドに失敗しました"
-        log_error "ビルドログを確認してください"
-        exit 1
-    }
-
-    # パッケージ作成
-    log_info "Step 5/5: パッケージ作成..."
-    ssh "$OPENBSD_HOST" "cd $REMOTE_PORT_DIR && sudo make package" || {
-        log_error "パッケージ作成に失敗しました"
-        exit 1
-    }
-
-    log_info "ビルド完了！"
-}
-
-# 動作確認
-verify_build() {
-    log_info "ビルド結果を確認中..."
-
-    ssh "$OPENBSD_HOST" "ls -lh $REMOTE_PORT_DIR/../../packages/amd64/all/ptyxis-*.tgz" || {
-        log_error "パッケージが見つかりません"
-        exit 1
-    }
-
-    log_info "パッケージをFedoraにコピー中..."
-    scp "$OPENBSD_HOST:/usr/ports/packages/amd64/all/ptyxis-$VERSION.tgz" "$WORK_DIR/" || {
-        log_error "パッケージのコピーに失敗しました"
-        exit 1
-    }
-
-    log_info "完了！パッケージ: $WORK_DIR/ptyxis-$VERSION.tgz"
-}
-
-# テストインストール（オプション）
-test_install() {
-    log_warn "テストインストールを実行しますか？ [y/N]"
-    read -p "" DO_INSTALL
-
-    if [ "$DO_INSTALL" = "y" ]; then
-        log_info "既存のptyxisを削除中..."
-        ssh "$OPENBSD_HOST" "sudo pkg_delete ptyxis || true"
-        ssh "$OPENBSD_HOST" "sudo rm -f /usr/local/bin/ptyxis /usr/local/libexec/ptyxis-agent"
-
-        log_info "新しいパッケージをインストール中..."
-        ssh "$OPENBSD_HOST" "sudo pkg_add -Dunsigned /usr/ports/packages/amd64/all/ptyxis-$VERSION.tgz" || {
-            log_error "インストールに失敗しました"
-            exit 1
-        }
-
-        log_info "バージョン確認..."
-        ssh "$OPENBSD_HOST" "ptyxis --version" || {
-            log_error "実行に失敗しました"
-            exit 1
-        }
-
-        log_info "テストインストール成功！"
-    fi
-}
-
-# メイン処理
-main() {
-    log_info "=== Ptyxis for OpenBSD - 自動ビルドスクリプト ==="
-    log_info ""
-
-    # バージョンチェック
-    check_latest_version
-
-    # Makefile検証
-    verify_makefile
-
-    # 同期
-    sync_to_openbsd
-
-    # ビルド
-    build_on_openbsd
-
-    # 確認
-    verify_build
-
-    # テストインストール（オプション）
-    test_install
-
-    log_info ""
-    log_info "=== すべての処理が完了しました ==="
-    log_info "パッケージ: $WORK_DIR/ptyxis-$VERSION.tgz"
-}
-
-# スクリプト実行
-main "$@"
+log_info "Done. Ptyxis $VERSION is installed on $OPENBSD_HOST."
