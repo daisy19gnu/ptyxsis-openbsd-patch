@@ -16,6 +16,12 @@ build/
 # Claude memory (private, not for version control)
 .claude/
 
+# Private notes and AI-specific files
+GEMINI.md
+CLAUDE.md
+Github.md
+PACKAGE_README.md
+
 # Upstream git clones (use git submodule if needed)
 ptyxis/
 
