@@ -1,11 +1,7 @@
-.gitignore
 AUTOMATION.md
 CLAUDE_BUILD_REPORT.md
 DEBUG_LOG.md
-build-ptysxis.sh
-check-version.sh
 DELIVERABLES.md
-DEBUG_LOG.md
 
 # Build artifacts
 *.tgz
