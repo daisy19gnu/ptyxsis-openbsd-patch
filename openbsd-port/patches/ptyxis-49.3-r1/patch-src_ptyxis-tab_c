@@ -5,8 +5,8 @@ Add sys/wait.h include for WIFEXITED, WEXITSTATUS, WIFSIGNALED, WTERMSIG macros 
 Fix typo in zoom_font_scales array: "1,2" should be "1.2". Without this fix the array has
 17 elements instead of 16, corrupting the zoom level table (upstream bug).
 
---- src/ptyxis-tab.c.orig	2026-03-02 08:15:18.472211776 +0900
-+++ src/ptyxis-tab.c	2026-03-02 08:15:47.583287881 +0900
+--- src/ptyxis-tab.c.orig
++++ src/ptyxis-tab.c
 @@ -21,6 +21,7 @@
 
  #include "config.h"

@@ -4,9 +4,9 @@ Set XDG_RUNTIME_DIR if not already set, as OpenBSD has no systemd to provide it.
 GTK4 and D-Bus require this directory for socket files and caches.
 Creates /tmp/runtime-UID (mode 0700) if it does not exist.
 
---- src/main.c.orig	2026-03-02 08:15:18.465211757 +0900
-+++ src/main.c	2026-03-02 08:15:37.839262407 +0900
-@@ -21,6 +21,10 @@
+--- src/main.c.orig
++++ src/main.c
+@@ -22,7 +22,12 @@
  #include "config.h"
 
  #include <errno.h>
@@ -17,7 +17,11 @@ Creates /tmp/runtime-UID (mode 0700) if it does not exist.
  #include <sys/resource.h>
 
  #include <glib/gi18n.h>
-@@ -201,6 +205,34 @@
+
+ #include "ptyxis-application.h"
+ #include "ptyxis-palette.h"
+ #include "ptyxis-util.h"
+@@ -192,6 +197,31 @@ ptyxis_application_get_default_rlimit_nofile (void)
    return default_rlimit_nofile;
  }
 
@@ -52,7 +56,7 @@ Creates /tmp/runtime-UID (mode 0700) if it does not exist.
  int
  main (int   argc,
        char *argv[])
-@@ -225,6 +257,10 @@
+@@ -208,6 +238,10 @@ main (int   argc,
    default_rlimit_nofile = get_current_fd_limit ();
    bump_to_max_fd_limit ();
 

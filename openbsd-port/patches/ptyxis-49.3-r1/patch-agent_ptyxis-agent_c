@@ -2,14 +2,16 @@ $OpenBSD$
 
 Add pledge(2) to ptyxis-agent to restrict system call access after startup.
 
-The agent needs cpath for creating container storage directories
-(g_mkdir_with_parents in podman provider). Without it, mkdir calls
-trigger a pledge violation (SIGABRT) on a fresh installation where
-~/.local/share/containers/storage/overlay-containers/ does not exist.
+The agent only needs to: spawn shells (proc+exec), manage PTYs (tty+rpath+wpath),
+communicate over D-Bus socketpair (stdio+unix+sendfd+recvfd), and look up user
+info for login shells (getpw). Network access is intentionally excluded.
 
---- agent/ptyxis-agent.c.orig	2026-03-02 07:55:00.567839435 +0900
-+++ agent/ptyxis-agent.c	2026-03-02 07:55:23.606898587 +0900
-@@ -28,6 +28,10 @@
+If pledge fails the agent exits with a fatal error rather than silently continuing
+with full privileges, following OpenBSD security best practices.
+
+--- agent/ptyxis-agent.c.orig
++++ agent/ptyxis-agent.c
+@@ -26,6 +26,10 @@
  #include <string.h>
  #include <unistd.h>
 
@@ -20,7 +22,7 @@ trigger a pledge violation (SIGABRT) on a fresh installation where
  #include <glib.h>
  #include <glib-unix.h>
  #include <glib/gstdio.h>
-@@ -205,6 +209,28 @@
+@@ -205,6 +209,21 @@ main (int   argc,
    g_set_prgname ("ptyxis-agent");
    g_set_application_name ("ptyxis-agent");
 
@@ -30,7 +32,6 @@ trigger a pledge violation (SIGABRT) on a fresh installation where
 +   *   stdio      - basic I/O, wait4, kqueue, pipe
 +   *   rpath      - read shell binaries, /etc/passwd, config files
 +   *   wpath      - write access paired with tty for PTY setup
-+   *   cpath      - create container storage directories (mkdir)
 +   *   tty        - posix_openpt, grantpt, unlockpt, ioctl on PTYs
 +   *   proc       - fork, setpgid, kill for child process management
 +   *   exec       - execve to launch user shells
@@ -39,7 +40,7 @@ trigger a pledge violation (SIGABRT) on a fresh installation where
 +   *   recvfd     - receive fds from ptyxis
 +   *   getpw      - getpwuid/getpwnam for login shell resolution
 +   */
-+  if (pledge ("stdio rpath wpath cpath tty proc exec unix sendfd recvfd getpw", NULL) == -1)
++  if (pledge ("stdio rpath wpath tty proc exec unix sendfd recvfd getpw", NULL) == -1)
 +    {
 +      g_printerr ("ptyxis-agent: pledge: %s\n", g_strerror (errno));
 +      return EXIT_FAILURE;

@@ -1,0 +1,15 @@
+$OpenBSD$
+
+Disable GLIBC compatibility layer on non-Linux systems (OpenBSD uses its own libc).
+
+--- agent/meson.build.orig
++++ agent/meson.build
+@@ -43,7 +43,7 @@ ptyxis_agent_c_args = [
+ ]
+
+ libc_compat = true
+-if target_machine.cpu_family() == 'x86_64'
++if target_machine.cpu_family() == 'x86_64' and target_machine.system() == 'linux'
+   ptyxis_agent_c_args += ['-include', 'x86_64/force_link_glibc_2.17.h']
+ else
+   libc_compat = false

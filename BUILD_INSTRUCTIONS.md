@@ -2,7 +2,29 @@
 
 OpenBSD 7.8 amd64 上で Ptyxis 49.3 をビルドする手順を説明します。
 
-## 推奨ビルド方法: direct meson ビルド
+## 推奨ビルド方法: 自動ビルドスクリプト
+
+Fedora ホストから OpenBSD へ SSH 経由でビルドする場合は `build-ptyxis.sh` を使用します。
+ソース取得、6パッチ適用、meson 設定、コンパイル、インストールを一括実行します。
+
+```sh
+# デフォルトホスト (openbsd77) でビルド
+./build-ptyxis.sh
+
+# 別ホストを指定
+OPENBSD_HOST=myhost ./build-ptyxis.sh
+
+# バージョンを上げてビルド
+./build-ptyxis.sh 49.4
+```
+
+スクリプトは SSH 鍵認証が設定済みであることを前提とします。
+環境変数 `OPENBSD_HOST`（デフォルト: openbsd77）と `REMOTE_SRCDIR`（デフォルト: ptyxis-src）で
+ホスト名と作業ディレクトリを変更できます。
+
+---
+
+## 手動ビルド: direct meson
 
 ports ツリーは WANTLIB のバージョン管理が煩雑なため、直接 meson でビルドします。
 
@@ -31,12 +53,10 @@ git clone https://gitlab.gnome.org/chergert/ptyxis.git
 cd ptyxis
 git checkout 49.3
 
-# OpenBSD 用パッチを適用（このリポジトリの openbsd-port/patches/ から）
-patch -p0 < /path/to/openbsd-port/patches/patch-agent_meson_build
-patch -p0 < /path/to/openbsd-port/patches/patch-agent_ptyxis-agent_c
-patch -p0 < /path/to/openbsd-port/patches/patch-src_main_c
-patch -p0 < /path/to/openbsd-port/patches/patch-src_ptyxis-tab_c
-patch -p0 < /path/to/openbsd-port/patches/patch-src_ptyxis-util_c
+# OpenBSD 用パッチを適用（6つ全て）
+for p in /path/to/openbsd-port/patches/patch-*; do
+  patch -p0 < "$p"
+done
 ```
 
 ### ビルドとインストール
@@ -92,38 +112,23 @@ make package
 
 ---
 
-## 自動ビルドスクリプト
-
-Fedora ホストから OpenBSD へ SSH 経由でビルドする場合は `build-ptyxis.sh` を使用します。
-
-```sh
-# デフォルトホスト (openbsd77) でビルド
-./build-ptyxis.sh
-
-# 別ホストを指定
-OPENBSD_HOST=myhost ./build-ptyxis.sh
-
-# バージョンを上げてビルド
-./build-ptyxis.sh 49.4
-```
-
-スクリプトは SSH 鍵認証が設定済みであることを前提とします。
-ホスト名の変更は環境変数 `OPENBSD_HOST` で行います（スクリプト内の書き換えは不要）。
-
----
-
 ## トラブルシューティング
 
-### パッチが当たらない
+### パッチが当たらない (malformed patch)
 
-新バージョンで上流コードが変更された場合は、パッチを更新します。
+OpenBSD の `patch` は hunk ヘッダーの行数カウントに厳密です。
+手書きのパッチではなく、`diff -u original modified` で生成したパッチを使用してください。
+
+### パッチが当たらない (バージョン変更時)
+
+新バージョンで上流コードが変更された場合は、パッチを再生成します。
 
 ```sh
 cd ptyxis
-git diff HEAD > /tmp/my-changes.patch
+cp target-file.c target-file.c.orig
+# 変更を適用
+diff -u target-file.c.orig target-file.c > /path/to/patch-file
 ```
-
-差分を確認し、`openbsd-port/patches/` 内の該当パッチを修正してください。
 
 ### ビルドエラー
 
@@ -142,16 +147,6 @@ sudo glib-compile-schemas /usr/local/share/glib-2.0/schemas/
 # デスクトップデータベースを更新
 sudo update-desktop-database /usr/local/share/applications/
 ```
-
-### WANTLIB エラー (ports 使用時)
-
-```
-Error: Libraries in packing-lists ... don't match
-```
-
-Makefile に `WANTLIB` 行が含まれている場合に発生します。
-現在の Makefile には `WANTLIB` は含まれていませんが、
-バージョンアップ後に再発した場合は meson 直接ビルドに切り替えてください。
 
 ---
 

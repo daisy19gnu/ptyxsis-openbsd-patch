@@ -4,8 +4,8 @@ Replace wordexp(3) with a simple path expansion for OpenBSD, which lacks this PO
 Also fix NULL pointer dereference: g_path_is_absolute() was called with potentially NULL ret.
 Also fix missing fallback: return copy of original path if expansion yields NULL.
 
---- src/ptyxis-util.c.orig	2026-03-02 08:15:18.476211786 +0900
-+++ src/ptyxis-util.c	2026-03-02 08:16:03.369329150 +0900
+--- src/ptyxis-util.c.orig
++++ src/ptyxis-util.c
 @@ -30,7 +30,9 @@
  #include <sys/ioctl.h>
  #include <termios.h>
