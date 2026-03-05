@@ -1,0 +1,80 @@
+$OpenBSD$
+
+Add hash table index for O(1) palette lookup by ID.
+
+ptyxis_palette_lookup() previously performed O(n) linear scan through
+the list model with g_list_model_get_item() ref/unref overhead per
+iteration. Add a GHashTable that maps palette IDs to PtyxisPalette
+objects, populated on initialization and updated via items-changed signal.
+
+Index: src/ptyxis-palette.c
+--- src/ptyxis-palette.c.orig
++++ src/ptyxis-palette.c
+@@ -112,18 +112,21 @@
+ {
+ }
+
++static GHashTable *palette_index; /* id -> PtyxisPalette (borrowed ref) */
++
+ PtyxisPalette *
+ ptyxis_palette_lookup (const char *id)
+ {
+-  GListModel *model = ptyxis_palette_get_all ();
+-  guint n_items = g_list_model_get_n_items (model);
++  PtyxisPalette *palette;
+
+-  for (guint i = 0; i < n_items; i++)
+-    {
+-      g_autoptr(PtyxisPalette) palette = g_list_model_get_item (model, i);
++  /* Ensure the model and index have been initialized */
++  ptyxis_palette_get_all ();
+
+-      if (g_strcmp0 (id, ptyxis_palette_get_id (palette)) == 0)
+-        return g_steal_pointer (&palette);
+-    }
++  if (palette_index != NULL &&
++      (palette = g_hash_table_lookup (palette_index, id)) != NULL)
++    return g_object_ref (palette);
+
+   return NULL;
+ }
+@@ -160,6 +163,24 @@
+ }
+
+ GListModel *
++static void
++palette_items_changed_cb (GListModel *model,
++                          guint       position,
++                          guint       removed,
++                          guint       added,
++                          gpointer    user_data)
++{
++  guint n_items = g_list_model_get_n_items (model);
++
++  g_hash_table_remove_all (palette_index);
++
++  for (guint i = 0; i < n_items; i++)
++    {
++      g_autoptr(PtyxisPalette) p = g_list_model_get_item (model, i);
++      g_hash_table_insert (palette_index, (gpointer)ptyxis_palette_get_id (p), p);
++    }
++}
++
++GListModel *
+ ptyxis_palette_get_all (void)
+ {
+   static GtkSortListModel *instance;
+@@ -196,6 +217,13 @@
+       instance = gtk_sort_list_model_new (G_LIST_MODEL (flatten),
+                                           GTK_SORTER (gtk_string_sorter_new (gtk_property_expression_new (PTYXIS_TYPE_PALETTE, NULL, "name"))));
+       g_object_add_weak_pointer (G_OBJECT (instance), (gpointer *)&instance);
++
++      /* Build palette index for O(1) lookups */
++      palette_index = g_hash_table_new (g_str_hash, g_str_equal);
++      g_signal_connect (instance, "items-changed",
++                        G_CALLBACK (palette_items_changed_cb), NULL);
++      palette_items_changed_cb (G_LIST_MODEL (instance), 0, 0,
++                                g_list_model_get_n_items (G_LIST_MODEL (instance)), NULL);
+     }
+
+   return G_LIST_MODEL (instance);

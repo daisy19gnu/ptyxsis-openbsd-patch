@@ -1,0 +1,49 @@
+$OpenBSD$
+
+Move release_link_args from c_args to link_args in both src/ and agent/
+meson.build files.
+
+Linker flags (-Wl,-z,defs, -Wl,-z,now, -Wl,-z,relro, -Wl,-Bsymbolic)
+were incorrectly passed as compiler arguments (c_args) instead of linker
+arguments (link_args). This caused clang to emit "linker input unused"
+warnings during compilation. Move them to link_args where they belong.
+
+Index: src/meson.build
+--- src/meson.build.orig
++++ src/meson.build
+@@ -95,7 +95,6 @@
+ endif
+
+ ptyxis_c_args = [
+-  release_link_args,
+   '-DG_LOG_DOMAIN="Ptyxis"',
+   '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_@0@'.format(glib_req_version.replace('.', '_')),
+   '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_@0@'.format(glib_req_version.replace('.', '_')),
+@@ -112,6 +111,7 @@
+ executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
+          dependencies: ptyxis_deps,
+               install: true,
+                c_args: ptyxis_c_args,
++            link_args: release_link_args,
+   include_directories: ptyxis_include_directories,
+ )
+
+Index: agent/meson.build
+--- agent/meson.build.orig
++++ agent/meson.build
+@@ -39,7 +39,6 @@
+ ptyxis_agent_link_args = []
+
+ ptyxis_agent_c_args = [
+-  release_link_args,
+   '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_@0@_@1@'.format(PTYXIS_AGENT_MIN_GLIB_MAJOR, PTYXIS_AGENT_MIN_GLIB_MINOR),
+   '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_@0@_@1@'.format(PTYXIS_AGENT_MIN_GLIB_MAJOR, PTYXIS_AGENT_MIN_GLIB_MINOR),
+ ]
+@@ -57,6 +56,6 @@
+               install: true,
+           install_dir: get_option('libexecdir'),
+                c_args: ptyxis_agent_c_args,
+-            link_args: ptyxis_agent_link_args,
++            link_args: ptyxis_agent_link_args + release_link_args,
+   include_directories: include_directories('..'),
+ )

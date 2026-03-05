@@ -1,0 +1,40 @@
+$OpenBSD$
+
+Fix TOCTOU race condition in palette import.
+
+The original code checks for file existence with g_file_test() then writes
+with g_file_set_contents(). Between these two operations, an attacker could
+create a symlink at the destination pointing to a sensitive file, causing
+the palette data to overwrite the symlink target.
+
+Replace with g_file_set_contents_full() using G_FILE_SET_CONTENTS_NONE which
+uses O_CREAT|O_EXCL semantics atomically, preventing symlink attacks.
+
+Index: src/main.c
+--- src/main.c.orig
++++ src/main.c
+@@ -150,16 +150,15 @@
+           exit (EXIT_FAILURE);
+         }
+
+-      if (g_file_test (dest, G_FILE_TEST_EXISTS))
++      if (!g_file_set_contents_full (dest, contents, len,
++                                     G_FILE_SET_CONTENTS_NONE,
++                                     0640, &error))
+         {
+-          g_printerr (_("Error: %s already exists.\nPlease remove it first.\n"), dest);
+-          exit (EXIT_FAILURE);
+-        }
+-
+-      if (!g_file_set_contents (dest, contents, len, &error))
+-        {
+-          g_printerr ("%s: %s\n", _("Error"), error->message);
+-          exit (EXIT_FAILURE);
++          if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_EXISTS))
++            g_printerr (_("Error: %s already exists.\nPlease remove it first.\n"), dest);
++          else
++            g_printerr ("%s: %s\n", _("Error"), error->message);
++           exit (EXIT_FAILURE);
+         }
+
+       exit (EXIT_SUCCESS);

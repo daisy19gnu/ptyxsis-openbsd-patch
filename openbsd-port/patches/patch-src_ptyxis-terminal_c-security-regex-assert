@@ -1,0 +1,39 @@
+$OpenBSD$
+
+Replace g_assert_no_error/g_assert_nonnull with graceful error handling
+for URL regex compilation in class_init.
+
+Using g_assert in production code causes abort() on failure. If a regex
+fails to compile (e.g. due to PCRE2 version differences), the entire
+application becomes unusable. Use g_critical + continue instead, and add
+NULL guards where the regexes are used in ptyxis_terminal_init.
+
+Index: src/ptyxis-terminal.c
+--- src/ptyxis-terminal.c.orig
++++ src/ptyxis-terminal.c
+@@ -1404,8 +1404,12 @@
+       url_regexes[i] = vte_regex_new_for_match (url_regexes_str[i],
+                                                 strlen (url_regexes_str[i]),
+                                                 PCRE2_UTF | PCRE2_NO_UTF_CHECK | PCRE2_UCP | PCRE2_MULTILINE,
+                                                 &error);
+-      g_assert_no_error (error);
+-      g_assert_nonnull (url_regexes[i]);
++      if (url_regexes[i] == NULL)
++        {
++          g_critical ("Failed to compile URL regex %u: %s", i,
++                      error ? error->message : "unknown error");
++          continue;
++        }
+
+       if (!vte_regex_jit (url_regexes[i], PCRE2_JIT_COMPLETE, &error) ||
+           !vte_regex_jit (url_regexes[i], PCRE2_JIT_PARTIAL_SOFT, &error))
+@@ -1631,6 +1635,9 @@
+   for (guint i = 0; i < G_N_ELEMENTS (url_regexes); i++)
+     {
+       int tag;
++
++      if (url_regexes[i] == NULL)
++        continue;
+
+       tag = vte_terminal_match_add_regex (VTE_TERMINAL (self), url_regexes[i], 0);
+       vte_terminal_match_set_cursor_name (VTE_TERMINAL (self), tag, URL_MATCH_CURSOR_NAME);

@@ -1,0 +1,78 @@
+$OpenBSD$
+
+Add pledge(2) and unveil(2) support for OpenBSD.
+
+For the --import-palette code path, apply a very restrictive pledge
+("stdio rpath wpath cpath") with unveil limited to the palette source
+and destination directory.
+
+For the main application path, pledge with the broader set of promises
+needed by a terminal emulator (proc, exec, tty, inet, etc.) and unveil
+paths required for GTK4, fonts, themes, user configuration, and shells.
+
+Index: src/main.c
+--- src/main.c.orig
++++ src/main.c
+@@ -22,6 +22,11 @@
+ #include <errno.h>
+ #include <sys/resource.h>
+
++#ifdef __OpenBSD__
++#include <unistd.h>
++#include <errno.h>
++#endif
++
+ #include <glib/gi18n.h>
+
+ #include "ptyxis-application.h"
+@@ -131,6 +136,20 @@
+   if (palette != NULL)
+     {
+       g_autoptr(GError) error = NULL;
++
++#ifdef __OpenBSD__
++      if (unveil (user_palettes_dir, "rwc") == -1 ||
++          unveil (palette, "r") == -1 ||
++          unveil (NULL, NULL) == -1)
++        {
++          g_printerr ("unveil: %s\n", g_strerror (errno));
++          exit (EXIT_FAILURE);
++        }
++      if (pledge ("stdio rpath wpath cpath", NULL) == -1)
++        {
++          g_printerr ("pledge: %s\n", g_strerror (errno));
++          exit (EXIT_FAILURE);
++        }
++#endif
+       g_autofree char *contents = NULL;
+       g_autofree char *basename = g_path_get_basename (palette);
+       g_autofree char *user_palettes_dir = ptyxis_get_user_palettes_dir ();
+@@ -227,6 +246,29 @@
+
+   gtk_init ();
+
++#ifdef __OpenBSD__
++  /* Unveil paths needed by a terminal emulator + GTK4 */
++  unveil ("/usr", "rx");
++  unveil ("/etc", "r");
++  unveil ("/dev", "rw");
++  unveil ("/tmp", "rwc");
++  unveil (g_get_home_dir (), "rwc");
++  unveil (g_get_user_data_dir (), "rwc");
++  unveil (g_get_user_config_dir (), "rwc");
++  unveil (g_get_user_cache_dir (), "rwc");
++  unveil (g_get_user_runtime_dir (), "rwc");
++  unveil ("/var/run", "rw");
++  unveil (NULL, NULL);
++
++  if (pledge ("stdio rpath wpath cpath fattr inet dns unix "
++              "proc exec prot_exec tty tmppath", NULL) == -1)
++    {
++      g_printerr ("pledge: %s\n", g_strerror (errno));
++      exit (EXIT_FAILURE);
++    }
++#endif
++
+   app = ptyxis_application_new (APP_ID, flags);
+   ret = g_application_run (G_APPLICATION (app), argc, argv);
+

@@ -1,0 +1,22 @@
+$OpenBSD$
+
+Remove unnecessary G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS
+from the agent D-Bus connection.
+
+The connection uses a private socketpair between parent and child processes,
+so anonymous authentication is unnecessary. The standard EXTERNAL auth
+mechanism (using getpeereid on OpenBSD) provides proper peer verification.
+
+Index: src/ptyxis-client.c
+--- src/ptyxis-client.c.orig
++++ src/ptyxis-client.c
+@@ -412,8 +412,7 @@
+   cancellable = g_cancellable_new ();
+   timeout_on_thread (cancellable);
+   if (!(bus = g_dbus_connection_new_sync (G_IO_STREAM (stream), guid,
+-                                          (G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS |
+-                                           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER),
++                                          G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER,
+                                           NULL, cancellable, error)))
+     return NULL;
+

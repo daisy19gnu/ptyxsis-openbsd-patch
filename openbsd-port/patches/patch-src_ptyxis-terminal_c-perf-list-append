@@ -1,0 +1,25 @@
+$OpenBSD$
+
+Fix O(n^2) list construction in URI drop handler.
+
+g_list_append() traverses the entire list to find the tail on each call,
+making N appends O(n^2). Use g_list_prepend() (O(1)) and reverse the list
+once before use, achieving O(n) total.
+
+Index: src/ptyxis-terminal.c
+--- src/ptyxis-terminal.c.orig
++++ src/ptyxis-terminal.c
+@@ -638,11 +638,12 @@
+       GFile *file = g_file_new_for_uri (line);
+
+       if (file != NULL)
+-        state->files = g_list_append (state->files, file);
++        state->files = g_list_prepend (state->files, file);
+     }
+
+   if (line == NULL || g_strcmp0 (state->mime_type, TEXT_X_MOZ_URL) == 0)
+     {
++      state->files = g_list_reverse (state->files);
+       ptyxis_terminal_drop_file_list (state->terminal, state->files);
+       gdk_drop_finish (state->drop, GDK_ACTION_COPY);
+       return;
