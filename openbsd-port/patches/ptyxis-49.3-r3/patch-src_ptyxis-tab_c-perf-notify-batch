@@ -1,0 +1,68 @@
+$OpenBSD$
+
+Batch property notifications in four multi-notify functions in ptyxis-tab.c.
+
+Four functions emit multiple g_object_notify_by_pspec() calls without
+freeze/thaw, causing redundant signal emissions and widget redraws:
+
+- ptyxis_tab_set_title_prefix(): TITLE_PREFIX + TITLE (on prefix change)
+- ptyxis_tab_set_zoom(): ZOOM + ZOOM_LABEL (on every Ctrl+=/- keypress)
+- ptyxis_tab_poll_agent_finish(): up to PROCESS_LEADER_KIND + COMMAND_LINE
+  + TITLE per command execution -- the highest-frequency case
+- ptyxis_tab_set_ignore_osc_title(): IGNORE_OSC_TITLE + TITLE
+
+Wrap each group with g_object_freeze_notify/g_object_thaw_notify so
+GObject deduplicates and delivers a single notification cycle.
+
+Index: src/ptyxis-tab.c
+--- src/ptyxis-tab.c.orig
++++ src/ptyxis-tab.c
+@@ -1421,8 +1421,10 @@
+ 
+   if (g_set_str (&self->title_prefix, title_prefix))
+     {
++      g_object_freeze_notify (G_OBJECT (self));
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TITLE_PREFIX]);
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TITLE]);
++      g_object_thaw_notify (G_OBJECT (self));
+     }
+ }
+ 
+@@ -1567,8 +1569,10 @@
+     {
+       self->zoom = zoom;
+       ptyxis_tab_apply_zoom (self);
++      g_object_freeze_notify (G_OBJECT (self));
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ZOOM]);
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ZOOM_LABEL]);
++      g_object_thaw_notify (G_OBJECT (self));
+     }
+ }
+ 
+@@ -1853,6 +1857,7 @@
+   else
+     leader_kind = PTYXIS_PROCESS_LEADER_KIND_UNKNOWN;
+ 
++  g_object_freeze_notify (G_OBJECT (self));
+   if (self->leader_kind != leader_kind)
+     {
+       changed = TRUE;
+@@ -1882,6 +1887,7 @@
+   if (changed)
+     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TITLE]);
+ 
++  g_object_thaw_notify (G_OBJECT (self));
+   g_task_return_boolean (task, changed);
+ }
+ 
+@@ -2333,8 +2339,10 @@
+   if (ignore_osc_title != self->ignore_osc_title)
+     {
+       self->ignore_osc_title = ignore_osc_title;
++      g_object_freeze_notify (G_OBJECT (self));
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_IGNORE_OSC_TITLE]);
+       g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TITLE]);
++      g_object_thaw_notify (G_OBJECT (self));
+     }
+ }
+ 
