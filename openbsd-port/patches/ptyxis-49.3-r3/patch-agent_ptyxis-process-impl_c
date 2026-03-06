@@ -1,0 +1,122 @@
+$OpenBSD$
+
+Add OpenBSD support for process information retrieval using sysctl(3).
+
+On OpenBSD, /proc is not typically mounted and has a different layout
+than Linux. Use sysctl(3) with KERN_PROC for process info (UID, command
+name), KERN_PROC_ARGS for command line, and KERN_PROC_CWD for working
+directory. This enables proper tab title tracking, sudo detection, and
+directory tracking in the terminal.
+
+--- agent/ptyxis-process-impl.c.orig	2026-03-02 07:55:00.568839437 +0900
++++ agent/ptyxis-process-impl.c	2026-03-02 07:56:22.821052146 +0900
+@@ -23,6 +23,10 @@
+
+ #include <errno.h>
+ #include <sys/stat.h>
++#ifdef __OpenBSD__
++#include <sys/sysctl.h>
++#include <limits.h>
++#endif
+ #include <unistd.h>
+
+ #include <glib/gstdio.h>
+@@ -199,6 +203,34 @@
+           cmdline = g_steal_pointer (&sanitized);
+         }
+     }
++#elif defined(__OpenBSD__)
++  {
++    int mib[4] = { CTL_KERN, KERN_PROC_ARGS, (int)pid, KERN_PROC_ARGV };
++    size_t len = 0;
++
++    if (sysctl (mib, 4, NULL, &len, NULL, 0) == 0 && len > 0)
++      {
++        g_autofree char *buf = g_malloc (len);
++
++        if (sysctl (mib, 4, buf, &len, NULL, 0) == 0)
++          {
++            char **argv = (char **)buf;
++            GString *str = g_string_new (NULL);
++
++            for (int i = 0; argv[i] != NULL; i++)
++              {
++                if (i > 0)
++                  g_string_append_c (str, ' ');
++                g_string_append (str, argv[i]);
++              }
++
++            if (str->len > 1024)
++              g_string_truncate (str, 1024);
++
++            cmdline = g_string_free (str, FALSE);
++          }
++      }
++  }
+ #endif
+
+   return g_steal_pointer (&cmdline);
+@@ -207,6 +239,26 @@
+ static const char *
+ get_leader_kind (GPid pid)
+ {
++#ifdef __OpenBSD__
++  struct kinfo_proc kp;
++  int mib[6] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)pid,
++                  sizeof (struct kinfo_proc), 1 };
++  size_t len = sizeof (kp);
++  const char *leader_kind = NULL;
++
++  if (sysctl (mib, 6, &kp, &len, NULL, 0) == 0)
++    {
++      if (kp.p_uid == 0)
++        return "superuser";
++
++      leader_kind = g_hash_table_lookup (exec_to_kind, kp.p_comm);
++    }
++
++  if (leader_kind == NULL)
++    leader_kind = "unknown";
++
++  return leader_kind;
++#else
+   g_autofree char *path = g_strdup_printf ("/proc/%d/", pid);
+   g_autofree char *exe = g_strdup_printf ("/proc/%d/exe", pid);
+   g_autoptr(GFile) file = g_file_new_for_path (path);
+@@ -238,6 +290,7 @@
+     leader_kind = "unknown";
+
+   return leader_kind;
++#endif
+ }
+
+ static gboolean
+@@ -307,6 +360,20 @@
+
+   if (pid > 0)
+     {
++#ifdef __OpenBSD__
++      char cwdbuf[PATH_MAX];
++      size_t cwdlen = sizeof (cwdbuf);
++      int name[3] = { CTL_KERN, KERN_PROC_CWD, (int)pid };
++
++      if (sysctl (name, 3, cwdbuf, &cwdlen, NULL, 0) == 0)
++        {
++          ptyxis_ipc_process_complete_get_working_directory (process,
++                                                             g_steal_pointer (&invocation),
++                                                             NULL,
++                                                             cwdbuf);
++          return TRUE;
++        }
++#else
+       /* TODO: This might need alternatives for non-Linux based kernels,
+        *       if that matters at all in places where it can be used.
+        */
+@@ -321,6 +388,7 @@
+                                                              cwd);
+           return TRUE;
+         }
++#endif
+     }
+
+   ptyxis_ipc_process_complete_get_working_directory (process,

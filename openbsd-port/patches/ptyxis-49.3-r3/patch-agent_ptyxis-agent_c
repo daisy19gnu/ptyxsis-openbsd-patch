@@ -1,0 +1,51 @@
+$OpenBSD$
+
+Add pledge(2) to ptyxis-agent to restrict system call access after startup.
+
+The agent needs cpath for creating container storage directories
+(g_mkdir_with_parents in podman provider). Without it, mkdir calls
+trigger a pledge violation (SIGABRT) on a fresh installation where
+~/.local/share/containers/storage/overlay-containers/ does not exist.
+
+--- agent/ptyxis-agent.c.orig	2026-03-02 07:55:00.567839435 +0900
++++ agent/ptyxis-agent.c	2026-03-02 07:55:23.606898587 +0900
+@@ -28,6 +28,10 @@
+ #include <string.h>
+ #include <unistd.h>
+
++#ifdef __OpenBSD__
++# include <errno.h>
++#endif
++
+ #include <glib.h>
+ #include <glib-unix.h>
+ #include <glib/gstdio.h>
+@@ -205,6 +209,28 @@
+   g_set_prgname ("ptyxis-agent");
+   g_set_application_name ("ptyxis-agent");
+
++#ifdef __OpenBSD__
++  /*
++   * Restrict system calls early. The agent needs:
++   *   stdio      - basic I/O, wait4, kqueue, pipe
++   *   rpath      - read shell binaries, /etc/passwd, config files
++   *   wpath      - write access paired with tty for PTY setup
++   *   cpath      - create container storage directories (mkdir)
++   *   tty        - posix_openpt, grantpt, unlockpt, ioctl on PTYs
++   *   proc       - fork, setpgid, kill for child process management
++   *   exec       - execve to launch user shells
++   *   unix       - D-Bus socketpair communication
++   *   sendfd     - pass PTY master fd to ptyxis over D-Bus
++   *   recvfd     - receive fds from ptyxis
++   *   getpw      - getpwuid/getpwnam for login shell resolution
++   */
++  if (pledge ("stdio rpath wpath cpath tty proc exec unix sendfd recvfd getpw", NULL) == -1)
++    {
++      g_printerr ("ptyxis-agent: pledge: %s\n", g_strerror (errno));
++      return EXIT_FAILURE;
++    }
++#endif
++
+   context = g_option_context_new ("- terminal container agent");
+   g_option_context_add_main_entries (context, entries, GETTEXT_PACKAGE);
+   if (!g_option_context_parse (context, &argc, &argv, &error) ||

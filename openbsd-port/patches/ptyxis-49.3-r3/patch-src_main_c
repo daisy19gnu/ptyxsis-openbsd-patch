@@ -1,0 +1,65 @@
+$OpenBSD$
+
+Set XDG_RUNTIME_DIR if not already set, as OpenBSD has no systemd to provide it.
+GTK4 and D-Bus require this directory for socket files and caches.
+Creates /tmp/runtime-UID (mode 0700) if it does not exist.
+
+--- src/main.c.orig	2026-03-02 08:15:18.465211757 +0900
++++ src/main.c	2026-03-02 08:15:37.839262407 +0900
+@@ -21,6 +21,10 @@
+ #include "config.h"
+
+ #include <errno.h>
++#ifdef __OpenBSD__
++# include <sys/stat.h>
++# include <unistd.h>
++#endif
+ #include <sys/resource.h>
+
+ #include <glib/gi18n.h>
+@@ -201,6 +205,34 @@
+   return default_rlimit_nofile;
+ }
+
++#ifdef __OpenBSD__
++static void
++ensure_xdg_runtime_dir (void)
++{
++  const char *existing = g_getenv ("XDG_RUNTIME_DIR");
++  char *dir;
++
++  if (existing != NULL && existing[0] != '\0')
++    return;
++
++  dir = g_strdup_printf ("/tmp/runtime-%d", (int) getuid ());
++
++  if (g_mkdir_with_parents (dir, 0700) == 0)
++    {
++      /* Ensure mode is 0700 even if dir already existed with wrong mode */
++      chmod (dir, 0700);
++      g_setenv ("XDG_RUNTIME_DIR", dir, TRUE);
++      g_debug ("Set XDG_RUNTIME_DIR to %s", dir);
++    }
++  else
++    {
++      g_warning ("Failed to create XDG_RUNTIME_DIR %s: %s", dir, g_strerror (errno));
++    }
++
++  g_free (dir);
++}
++#endif
++
+ int
+ main (int   argc,
+       char *argv[])
+@@ -225,6 +257,10 @@
+   default_rlimit_nofile = get_current_fd_limit ();
+   bump_to_max_fd_limit ();
+
++#ifdef __OpenBSD__
++  ensure_xdg_runtime_dir ();
++#endif
++
+   gtk_init ();
+
+   app = ptyxis_application_new (APP_ID, flags);

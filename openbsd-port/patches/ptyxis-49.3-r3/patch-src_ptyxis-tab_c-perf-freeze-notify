@@ -1,0 +1,22 @@
+$OpenBSD$
+
+Batch property notifications in ptyxis_tab_invalidate_progress().
+
+Three separate g_object_notify_by_pspec() calls trigger individual signal
+emissions. Use g_object_freeze_notify/g_object_thaw_notify to batch them
+into a single notification cycle, reducing redundant UI updates.
+
+Index: src/ptyxis-tab.c
+--- src/ptyxis-tab.c.orig
++++ src/ptyxis-tab.c
+@@ -967,8 +967,10 @@
+ {
+   g_assert (PTYXIS_IS_TAB (self));
+
++  g_object_freeze_notify (G_OBJECT (self));
+   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PROGRESS]);
+   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PROGRESS_FRACTION]);
+   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_INDICATOR_ICON]);
++  g_object_thaw_notify (G_OBJECT (self));
+ }
+

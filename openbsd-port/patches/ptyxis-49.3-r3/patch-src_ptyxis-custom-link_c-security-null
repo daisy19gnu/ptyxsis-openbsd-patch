@@ -1,0 +1,25 @@
+$OpenBSD$
+
+Fix potential NULL pointer dereference in ptyxis_custom_link_substitute().
+
+When vte_regex_substitute() returns NULL (e.g. due to regex error),
+g_uri_escape_string() would be called with a NULL argument, causing a crash.
+Add early return for NULL case.
+
+Index: src/ptyxis-custom-link.c
+--- src/ptyxis-custom-link.c.orig
++++ src/ptyxis-custom-link.c
+@@ -255,7 +255,10 @@
+   if (subst == NULL)
+-    g_warning ("Failed to perform substitution with regex: %s: Regex was: '%s', Substitution was: '%s', Subject was: '%s'",
+-               (error != NULL) ? error->message : "(error null)",
+-               self->pattern, self->target, subject);
++    {
++      g_warning ("Failed to perform substitution with regex: %s: Regex was: '%s', Substitution was: '%s', Subject was: '%s'",
++                 (error != NULL) ? error->message : "(error null)",
++                 self->pattern, self->target, subject);
++      return NULL;
++    }
+
+   return g_uri_escape_string (subst, ":/.", FALSE);
+ }

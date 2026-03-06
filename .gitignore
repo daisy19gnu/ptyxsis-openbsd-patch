@@ -2,6 +2,7 @@ AUTOMATION.md
 CLAUDE_BUILD_REPORT.md
 DEBUG_LOG.md
 DELIVERABLES.md
+claude-continue.sh
 
 # Build artifacts
 *.tgz

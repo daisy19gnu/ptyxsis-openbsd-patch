@@ -1,0 +1,70 @@
+$OpenBSD$
+
+Replace wordexp(3) with a simple path expansion for OpenBSD, which lacks this POSIX function.
+Also fix NULL pointer dereference: g_path_is_absolute() was called with potentially NULL ret.
+Also fix missing fallback: return copy of original path if expansion yields NULL.
+
+--- src/ptyxis-util.c.orig	2026-03-02 08:15:18.476211786 +0900
++++ src/ptyxis-util.c	2026-03-02 08:16:03.369329150 +0900
+@@ -30,7 +30,9 @@
+ #include <sys/ioctl.h>
+ #include <termios.h>
+ #include <unistd.h>
++#ifndef __OpenBSD__
+ #include <wordexp.h>
++#endif
+
+ #include <glib-unix.h>
+ #include <glib/gi18n.h>
+@@ -179,11 +181,8 @@
+ char *
+ ptyxis_path_expand (const char *path)
+ {
+-  wordexp_t state = { 0 };
+   char *replace_home = NULL;
+   char *ret = NULL;
+-  char *escaped;
+-  int r;
+
+   if (path == NULL)
+     return NULL;
+@@ -204,13 +203,22 @@
+         path = replace_home = g_strdup_printf ("%s%s", g_get_home_dir (), &path[5]);
+     }
+
+-  escaped = g_shell_quote (path);
+-  r = wordexp (escaped, &state, WRDE_NOCMD);
+-  if (r == 0 && state.we_wordc > 0)
+-    ret = g_strdup (state.we_wordv [0]);
+-  wordfree (&state);
++#ifndef __OpenBSD__
++  {
++    wordexp_t state = { 0 };
++    char *escaped = g_shell_quote (path);
++    int r = wordexp (escaped, &state, WRDE_NOCMD);
++    if (r == 0 && state.we_wordc > 0)
++      ret = g_strdup (state.we_wordv [0]);
++    wordfree (&state);
++    g_free (escaped);
++  }
++#else
++  /* OpenBSD lacks wordexp(3); ~ and $HOME already handled above */
++  ret = g_strdup (path);
++#endif
+
+-  if (!g_path_is_absolute (ret))
++  if (ret != NULL && !g_path_is_absolute (ret))
+     {
+       g_autofree char *freeme = ret;
+
+@@ -218,9 +226,8 @@
+     }
+
+   g_free (replace_home);
+-  g_free (escaped);
+
+-  return ret;
++  return ret != NULL ? ret : g_strdup (path);
+ }
+
+ /**
