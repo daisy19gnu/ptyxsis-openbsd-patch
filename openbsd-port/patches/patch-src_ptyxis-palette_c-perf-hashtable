@@ -5,7 +5,11 @@ Add hash table index for O(1) palette lookup by ID.
 ptyxis_palette_lookup() previously performed O(n) linear scan through
 the list model with g_list_model_get_item() ref/unref overhead per
 iteration. Add a GHashTable that maps palette IDs to PtyxisPalette
-objects, populated on initialization and updated via items-changed signal.
+objects, populated on initialization and kept in sync via items-changed.
+
+The items-changed callback uses position/removed/added parameters:
+- removed > 0: full rebuild (removed IDs are no longer accessible)
+- removed == 0: incremental insert of [position, position+added) only
 
 Index: src/ptyxis-palette.c
 --- src/ptyxis-palette.c.orig
@@ -38,7 +42,7 @@ Index: src/ptyxis-palette.c
  
    return NULL;
  }
-@@ -159,6 +159,24 @@
+@@ -159,6 +159,38 @@
    return g_build_filename (g_get_user_data_dir (), APP_ID, "palettes", NULL);
  }
  
@@ -49,21 +53,35 @@ Index: src/ptyxis-palette.c
 +                          guint       added,
 +                          gpointer    user_data)
 +{
-+  guint n_items = g_list_model_get_n_items (model);
-+
-+  g_hash_table_remove_all (palette_index);
-+
-+  for (guint i = 0; i < n_items; i++)
++  if (removed > 0)
 +    {
-+      g_autoptr(PtyxisPalette) p = g_list_model_get_item (model, i);
-+      g_hash_table_insert (palette_index, (gpointer)ptyxis_palette_get_id (p), p);
++      /* Items were removed: cannot know their IDs after the fact,
++       * so rebuild the full index from the current model state. */
++      guint n_items = g_list_model_get_n_items (model);
++
++      g_hash_table_remove_all (palette_index);
++
++      for (guint i = 0; i < n_items; i++)
++        {
++          g_autoptr(PtyxisPalette) p = g_list_model_get_item (model, i);
++          g_hash_table_insert (palette_index, (gpointer)ptyxis_palette_get_id (p), p);
++        }
++    }
++  else
++    {
++      /* Pure addition: index only the newly inserted items. */
++      for (guint i = position; i < position + added; i++)
++        {
++          g_autoptr(PtyxisPalette) p = g_list_model_get_item (model, i);
++          g_hash_table_insert (palette_index, (gpointer)ptyxis_palette_get_id (p), p);
++        }
 +    }
 +}
 +
  GListModel *
  ptyxis_palette_get_all (void)
  {
-@@ -197,6 +215,13 @@
+@@ -197,6 +229,13 @@
        instance = gtk_sort_list_model_new (G_LIST_MODEL (flatten),
                                            GTK_SORTER (gtk_string_sorter_new (gtk_property_expression_new (PTYXIS_TYPE_PALETTE, NULL, "name"))));
        g_object_add_weak_pointer (G_OBJECT (instance), (gpointer *)&instance);
