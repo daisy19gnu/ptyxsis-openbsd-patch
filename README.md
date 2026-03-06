@@ -30,7 +30,7 @@ OpenBSD-Ptyxis/
 │   ├── Makefile              # ビルド定義 (V=49.3)
 │   ├── distinfo              # チェックサム (SHA256)
 │   ├── README.OpenBSD        # OpenBSD 固有のビルド手順
-│   ├── patches/              # OpenBSD 用パッチ (15つ)
+│   ├── patches/              # OpenBSD 用パッチ (15種)
 │   │   ├── patch-agent_meson_build                          # Linux専用ビルド制限
 │   │   ├── patch-agent_ptyxis-agent_c                       # pledge(2) セキュリティ強化
 │   │   ├── patch-agent_ptyxis-process-impl_c                # sysctl(3) プロセス情報取得
@@ -86,7 +86,7 @@ git clone https://gitlab.gnome.org/chergert/ptyxis.git
 cd ptyxis
 git checkout 49.3
 
-# パッチ適用（15つ全て、アルファベット順）
+# パッチ適用（15種全て、アルファベット順）
 for p in /path/to/openbsd-port/patches/patch-*; do
   patch -p0 < "$p"
 done
@@ -105,7 +105,7 @@ ptyxis
 
 `XDG_RUNTIME_DIR` は `patch-src_main_c` により自動的に `/tmp/runtime-UID` に設定されます。
 
-## OpenBSD 向けパッチの概要 (15つ)
+## OpenBSD 向けパッチの概要 (15種)
 
 ### patch-agent_meson_build
 
